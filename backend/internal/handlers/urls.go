@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -29,7 +30,7 @@ func (h *Handler) ListURLs(c *gin.Context) {
 			Slug:        url.Slug,
 			OriginalURL: url.OriginalURL,
 			ShortURL:    h.cfg.BaseURL + "/" + url.Slug,
-			CreatedAt:   url.CreatedAt,
+			CreatedAt:   url.CreatedAt.Format(time.RFC3339),
 		})
 	}
 

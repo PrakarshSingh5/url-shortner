@@ -9,8 +9,6 @@ import (
 	"github.com/PrakarshSingh5/url-shortner/backend/internal/models"
 )
 
-const sqliteDateLayout = "2006-01-02 15:04:05"
-
 var (
 	// ErrNotFound indicates the requested slug does not exist in the database.
 	ErrNotFound = errors.New("url not found")
@@ -30,38 +28,27 @@ func NewURLRepository(db *sql.DB) *URLRepository {
 
 // Create inserts a new shortened URL into the database.
 func (r *URLRepository) Create(slug, originalURL string) (*models.URL, error) {
-	query := `INSERT INTO urls (slug, original_url) VALUES (?, ?)`
+	query := `INSERT INTO urls (slug, original_url) VALUES ($1, $2) RETURNING id, slug, original_url, created_at`
 
-	result, err := r.db.Exec(query, slug, originalURL)
-	if err != nil {
+	var url models.URL
+	if err := r.db.QueryRow(query, slug, originalURL).Scan(&url.ID, &url.Slug, &url.OriginalURL, &url.CreatedAt); err != nil {
 		if isUniqueConstraintError(err) {
 			return nil, ErrDuplicateSlug
 		}
 		return nil, err
 	}
 
-	id, err := result.LastInsertId()
-	if err != nil {
-		return nil, err
-	}
-
-	url, err := r.GetByID(id)
-	if err != nil {
-		return nil, err
-	}
-
-	return url, nil
+	return &url, nil
 }
 
 // Fetch by original URL
 func (r *URLRepository) GetByOriginalURL(originalUrl string) (*models.URL, error) {
-	const query = `SELECT id, slug,original_url, created_at FROM urls WHERE original_url=? LIMIT 1`
+	const query = `SELECT id, slug, original_url, created_at FROM urls WHERE original_url = $1 LIMIT 1`
 	row := r.db.QueryRow(query, originalUrl)
 
 	var url models.URL
 	if err := row.Scan(&url.ID, &url.Slug, &url.OriginalURL, &url.CreatedAt); err != nil {
 		if err == sql.ErrNoRows {
-
 			return nil, nil
 		}
 		log.Printf("ERROR in GetByOriginalURL query: %v", err)
@@ -88,7 +75,7 @@ func (r *URLRepository) GetBySlug(slug string) (*models.URL, error) {
 
 // GetAll returns all shortened URLs ordered by creation date descending.
 func (r *URLRepository) GetAll() ([]models.URL, error) {
-	query := `SELECT id, slug, original_url, created_at FROM urls ORDER BY datetime(created_at) DESC`
+	query := `SELECT id, slug, original_url, created_at FROM urls ORDER BY created_at DESC`
 
 	rows, err := r.db.Query(query)
 	if err != nil {
@@ -99,13 +86,10 @@ func (r *URLRepository) GetAll() ([]models.URL, error) {
 	urls := make([]models.URL, 0)
 	for rows.Next() {
 		var model models.URL
-		var createdAt string
-
-		if err := rows.Scan(&model.ID, &model.Slug, &model.OriginalURL, &createdAt); err != nil {
+		if err := rows.Scan(&model.ID, &model.Slug, &model.OriginalURL, &model.CreatedAt); err != nil {
 			return nil, err
 		}
 
-		model.CreatedAt = createdAt
 		urls = append(urls, model)
 	}
 
@@ -118,7 +102,7 @@ func (r *URLRepository) GetAll() ([]models.URL, error) {
 
 // SlugExists checks whether a slug is already present in the database.
 func (r *URLRepository) SlugExists(slug string) (bool, error) {
-	query := `SELECT COUNT(1) FROM urls WHERE slug = ?`
+	query := `SELECT COUNT(1) FROM urls WHERE slug = $1`
 
 	var count int
 	if err := r.db.QueryRow(query, slug).Scan(&count); err != nil {
@@ -130,17 +114,12 @@ func (r *URLRepository) SlugExists(slug string) (bool, error) {
 
 func scanURL(row *sql.Row) (*models.URL, error) {
 	var model models.URL
-	var createdAt string
-
-	if err := row.Scan(&model.ID, &model.Slug, &model.OriginalURL, &createdAt); err != nil {
+	if err := row.Scan(&model.ID, &model.Slug, &model.OriginalURL, &model.CreatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, err
 	}
-
-	
-	model.CreatedAt = createdAt
 
 	return &model, nil
 }

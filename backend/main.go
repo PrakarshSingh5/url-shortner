@@ -18,7 +18,7 @@ func main() {
 		log.Fatalf("failed to load configuration: %v", err)
 	}
 
-	db, err := database.New(cfg.DBPath)
+	db, err := database.New()
 	if err != nil {
 		log.Fatalf("failed to connect to database: %v", err)
 	}

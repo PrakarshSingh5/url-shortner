@@ -1,43 +1,55 @@
 package database
 
 import (
-    "database/sql"
-    "fmt"
+	"database/sql"
+	"fmt"
+	"log"
+	"os"
 
-    _ "modernc.org/sqlite"
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 )
 
-const sqliteDriver = "sqlite"
-
-// New opens a SQLite database located at the given path and ensures foreign keys support.
-func New(path string) (*sql.DB, error) {
-    dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)", path)
-    db, err := sql.Open(sqliteDriver, dsn)
-    if err != nil {
-        return nil, fmt.Errorf("open sqlite database: %w", err)
-    }
-
-    if err := db.Ping(); err != nil {
-        _ = db.Close()
-        return nil, fmt.Errorf("ping sqlite database: %w", err)
-    }
-
-    return db, nil
+func LoadEnv() {
+	if err := godotenv.Load(); err != nil {
+		log.Println("⚠️ .env file not found — using system env vars")
+	}
 }
 
-// Migrate creates the required tables if they do not exist.
+func New() (*sql.DB, error) {
+	LoadEnv()
+
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		return nil, fmt.Errorf("DATABASE_URL is not set")
+	}
+
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open postgres: %w", err)
+	}
+
+	if err := db.Ping(); err != nil {
+		return nil, fmt.Errorf("failed to ping postgres: %w", err)
+	}
+
+	log.Println("✅ Connected to Neon PostgreSQL successfully!")
+	return db, nil
+}
+
 func Migrate(db *sql.DB) error {
-    const query = `
-    CREATE TABLE IF NOT EXISTS urls (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        slug TEXT UNIQUE NOT NULL,
-        original_url TEXT NOT NULL,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )`
+	const query = `
+	CREATE TABLE IF NOT EXISTS urls (
+    id SERIAL PRIMARY KEY,
+    slug VARCHAR(50) UNIQUE NOT NULL,
+    original_url TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);`
 
-    if _, err := db.Exec(query); err != nil {
-        return fmt.Errorf("migrate database: %w", err)
-    }
+	if _, err := db.Exec(query); err != nil {
+		return fmt.Errorf("migrate database: %w", err)
+	}
 
-    return nil
+	log.Println("✅ Migration completed successfully!")
+	return nil
 }
